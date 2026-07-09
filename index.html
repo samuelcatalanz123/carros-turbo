@@ -47,6 +47,16 @@
   .swatch{width:46px; height:46px; border-radius:12px; border:3px solid transparent; cursor:pointer;}
   .swatch.sel{border-color:#fff;}
   #installBtn{margin-top:12px; background:linear-gradient(180deg,#6ad0ff,#2a86ff);}
+  .rbtn{position:absolute; z-index:6; pointer-events:auto; border:2px solid var(--panelbd);
+    background:var(--panel); color:#fff; border-radius:50%; display:grid; place-items:center;
+    backdrop-filter:blur(6px); font-size:30px; line-height:1; width:92px; height:92px;}
+  .rbtn i{display:block; font-style:normal; font-size:10px; letter-spacing:.05em; margin-top:2px; color:#cfe0d4;}
+  .rbtn.small{width:62px; height:62px; font-size:22px;}
+  .rbtn:active{transform:scale(.92);}
+  .rbtn.ready{border-color:#ffd23f; box-shadow:0 0 14px rgba(255,180,40,.6);}
+  #gasBtn{right:18px; bottom:26px;} #nitroBtn{right:120px; bottom:44px;}
+  #brakeBtn{left:18px; bottom:26px;} #honkBtn{left:120px; bottom:44px;}
+  #nightBtn{right:14px; top:60px; width:46px; height:46px; font-size:22px;}
   @media (prefers-reduced-motion:reduce){*{transition:none!important;}}
 </style>
 
@@ -59,6 +69,12 @@
     <span class="chip"><small>RÉCORD</small> <span id="best">0</span></span>
   </div>
 
+  <button class="rbtn" id="brakeBtn">🛑<i>FRENO</i></button>
+  <button class="rbtn small" id="honkBtn">📢<i>PITAR</i></button>
+  <button class="rbtn" id="gasBtn">🔼<i>GAS</i></button>
+  <button class="rbtn small" id="nitroBtn">💨<i>TURBO</i></button>
+  <button class="rbtn night" id="nightBtn">🌙</button>
+
   <div class="screen" id="menu">
     <div class="kick">Corredor sin fin</div>
     <h1 class="title">Carros<br>Turbo</h1>
@@ -67,8 +83,9 @@
     <button class="cta" id="playBtn">Jugar</button>
     <button class="cta" id="installBtn">📲 Instalar app</button>
     <div class="help">
-      <b>Arrastra el dedo</b> para mover el carro (o usa las <b>flechas ← →</b>).<br>
-      Choca = fin. ¡La velocidad sube sola!
+      <b>Arrastra el dedo</b> para mover (o flechas ← →).<br>
+      🔼 <b>Gas</b> · 🛑 <b>Freno</b> · 💨 <b>Turbo</b> · 📢 <b>Pitar</b> · 🌙 <b>Noche</b><br>
+      Choca = fin. ¡Recoge monedas para cargar el turbo!
     </div>
   </div>
 
@@ -111,12 +128,15 @@ function crashSound(){ if(muted)return; const a=ac(); if(!a)return; const dur=0.
   const s=a.createBufferSource(); s.buffer=buf; const g=a.createGain(); g.gain.value=0.3;
   s.connect(g).connect(a.destination); s.start(); }
 const SFX={ coin:()=>beep(880,0.09,0.18,'square',1320), crash:crashSound,
-  start:()=>{beep(400,0.1,0.2);setTimeout(()=>beep(600,0.12,0.2),100);} };
+  start:()=>{beep(400,0.1,0.2);setTimeout(()=>beep(600,0.12,0.2),100);},
+  honk:()=>{beep(370,0.16,0.28,'sawtooth');setTimeout(()=>beep(300,0.2,0.28,'sawtooth'),60);},
+  turbo:()=>beep(320,0.35,0.22,'sawtooth',1000) };
 
 // ---- estado ----
 let state='menu', player=null, enemies=[], coins=[], parts=[];
 let dist=0, speed=0, coinsRun=0, scroll=0, spawnT=0, coinT=0, lastTime=0, shake=0;
 let best=+(localStorage.getItem('cr_best')||0), totalCoins=+(localStorage.getItem('cr_coins')||0);
+let gasHeld=false, brakeHeld=false, turboT=0, nitro=100, night=(localStorage.getItem('cr_night')==='1');
 const CAR_COLORS=['#e8402c','#2a86ff','#20c060','#ffcc22','#c04ad0','#ff7a1a','#f2f2f2','#18c8c8'];
 let carColor=localStorage.getItem('cr_color')||CAR_COLORS[0];
 
@@ -125,19 +145,27 @@ function layoutPlayer(){ const w=Math.min(laneW*0.62,64), h=w*1.7;
   player.w=w; player.h=h; player.y=H*0.80; player.x=clamp(player.x||W/2, road.x+w/2, road.x+road.w-w/2); }
 
 function reset(){ enemies=[]; coins=[]; parts=[]; dist=0; speed=5; coinsRun=0; scroll=0; spawnT=0; coinT=40; shake=0;
+  turboT=0; nitro=100; gasHeld=false; brakeHeld=false;
   layoutPlayer(); player.x=W/2; player.tilt=0; updateHUD(); }
 
 // ---- entrada (dedo o teclado) ----
-let targetX=null; const keys={};
-function pointer(e){ const t=e.touches?e.touches[0]:e; if(t) targetX=t.clientX; }
-cv.addEventListener('touchstart',e=>{e.preventDefault(); ac()&&ac().resume&&ac().resume(); pointer(e);},{passive:false});
-cv.addEventListener('touchmove',e=>{e.preventDefault(); pointer(e);},{passive:false});
-cv.addEventListener('touchend',e=>{e.preventDefault(); targetX=null;},{passive:false});
+let targetX=null, steerId=null; const keys={};
+cv.addEventListener('touchstart',e=>{e.preventDefault(); ac()&&ac().resume&&ac().resume();
+  for(const t of e.changedTouches){ if(steerId===null){ steerId=t.identifier; targetX=t.clientX; break; } }},{passive:false});
+cv.addEventListener('touchmove',e=>{e.preventDefault(); for(const t of e.changedTouches){ if(t.identifier===steerId) targetX=t.clientX; }},{passive:false});
+function endSteer(e){ for(const t of e.changedTouches){ if(t.identifier===steerId){ steerId=null; targetX=null; } } }
+cv.addEventListener('touchend',e=>{e.preventDefault(); endSteer(e);},{passive:false});
+cv.addEventListener('touchcancel',e=>{e.preventDefault(); endSteer(e);},{passive:false});
 cv.addEventListener('mousedown',e=>{ ac()&&ac().resume&&ac().resume(); targetX=e.clientX; });
 cv.addEventListener('mousemove',e=>{ if(e.buttons) targetX=e.clientX; });
 addEventListener('mouseup',()=>{ targetX=null; });
-addEventListener('keydown',e=>{ keys[e.key]=true; });
+addEventListener('keydown',e=>{ keys[e.key]=true;
+  if(e.key===' '){ e.preventDefault(); doTurbo(); }
+  if(e.key==='h'||e.key==='H') SFX.honk();
+  if(e.key==='n'||e.key==='N') toggleNight(); });
 addEventListener('keyup',e=>{ keys[e.key]=false; });
+function doTurbo(){ if(state!=='playing'||turboT>0||nitro<40) return; nitro-=40; turboT=140; SFX.turbo(); }
+function toggleNight(){ night=!night; localStorage.setItem('cr_night', night?'1':'0'); const b=$('nightBtn'); if(b)b.textContent=night?'☀️':'🌙'; }
 
 // ---- botones y selector de carro ----
 (function(){ const box=$('cars'); CAR_COLORS.forEach(c=>{ const s=document.createElement('div');
@@ -155,11 +183,33 @@ $('installBtn').addEventListener('click', async e=>{ e.stopPropagation();
   if(deferred){ deferred.prompt(); try{await deferred.userChoice;}catch(_){} deferred=null; }
   else alert('Para instalar:\n\niPhone (Safari): Compartir ↑ → "Añadir a pantalla de inicio".\nAndroid (Chrome): menú ⋮ → "Instalar aplicación".'); });
 
+// mantener presionado (gas / freno)
+function bindHold(el,on,off){
+  el.addEventListener('touchstart',e=>{e.preventDefault();e.stopPropagation(); on();},{passive:false});
+  el.addEventListener('touchend',e=>{e.preventDefault();e.stopPropagation(); off();},{passive:false});
+  el.addEventListener('touchcancel',()=>off());
+  el.addEventListener('mousedown',e=>{e.stopPropagation(); on();});
+  el.addEventListener('mouseup',e=>{e.stopPropagation(); off();});
+  el.addEventListener('mouseleave',()=>off()); }
+// tocar una vez (turbo / pitar / noche)
+function bindTap(el,fn){
+  el.addEventListener('touchstart',e=>{e.preventDefault();e.stopPropagation(); fn();},{passive:false});
+  el.addEventListener('click',e=>{e.stopPropagation(); fn();}); }
+bindHold($('gasBtn'), ()=>gasHeld=true, ()=>gasHeld=false);
+bindHold($('brakeBtn'), ()=>brakeHeld=true, ()=>brakeHeld=false);
+bindTap($('nitroBtn'), doTurbo);
+bindTap($('honkBtn'), ()=>SFX.honk());
+bindTap($('nightBtn'), toggleNight);
+$('nightBtn').textContent = night?'☀️':'🌙';
+
 function start(){ ac()&&ac().resume&&ac().resume(); reset(); state='playing'; SFX.start();
   $('menu').classList.add('hide'); $('over').classList.add('hide'); lastTime=performance.now(); }
 
 function updateHUD(){ $('mts').textContent=Math.floor(dist); $('coins').textContent=coinsRun;
-  $('best').textContent=best; }
+  $('best').textContent=best;
+  const nb=$('nitroBtn'); if(nb){ const p=nitro.toFixed(0);
+    nb.style.background='linear-gradient(0deg, rgba(255,122,26,.9) '+p+'%, var(--panel) '+p+'%)';
+    nb.classList.toggle('ready', nitro>=40 && turboT<=0); } }
 
 // ---- crear tráfico y monedas ----
 function laneCenter(i){ return road.x + laneW*(i+0.5); }
@@ -170,7 +220,11 @@ function spawnCoin(){ const lane=(Math.random()*LANES)|0; coins.push({x:laneCent
 // ---- bucle ----
 function update(now,dt){
   const f=clamp(dt/16.67,0.2,3);
-  speed = Math.min(14, 5 + dist*0.0009);        // acelera con la distancia
+  turboT=Math.max(0,turboT-f); nitro=Math.min(100, nitro + 0.12*f);
+  const gas=gasHeld||keys['ArrowUp']||keys['w'], brake=brakeHeld||keys['ArrowDown']||keys['s'];
+  const baseAuto=Math.min(14, 5 + dist*0.0009);
+  const tgt = turboT>0? 22 : gas? baseAuto+5 : brake? 3 : baseAuto;   // turbo > gas > crucero > freno
+  speed += (tgt-speed)*Math.min(1,0.06*f);
   dist += speed*f*0.6;
   scroll = (scroll + speed*f) % 40;
 
@@ -193,7 +247,7 @@ function update(now,dt){
   coins=coins.filter(co=>{
     if(co.y>H+30) return false;
     if(Math.abs(co.x-player.x)<player.w*0.6 && Math.abs(co.y-player.y)<player.h*0.6){
-      coinsRun++; totalCoins++; localStorage.setItem('cr_coins',totalCoins); SFX.coin();
+      coinsRun++; totalCoins++; nitro=Math.min(100,nitro+15); localStorage.setItem('cr_coins',totalCoins); SFX.coin();
       for(let i=0;i<8;i++) parts.push({x:co.x,y:co.y,vx:rnd(-2,2),vy:rnd(-3,1),life:20,c:'#ffcc22'});
       return false; }
     return true; });
@@ -233,6 +287,12 @@ function drawCar(x,y,w,h,color,tilt){
 }
 function rr(x,y,w,h,r){ ctx.beginPath(); ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r);
   ctx.arcTo(x+w,y+h,x,y+h,r); ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath(); }
+function drawHeadlights(car){   // conos de luz de los faros (modo noche)
+  const fy=car.y-car.h/2, g=ctx.createLinearGradient(0,fy,0,fy-260);
+  g.addColorStop(0,'rgba(255,245,200,0.40)'); g.addColorStop(1,'rgba(255,245,200,0)');
+  ctx.fillStyle=g; ctx.beginPath();
+  ctx.moveTo(car.x-car.w*0.35, fy); ctx.lineTo(car.x-car.w*1.5, fy-260);
+  ctx.lineTo(car.x+car.w*1.5, fy-260); ctx.lineTo(car.x+car.w*0.35, fy); ctx.closePath(); ctx.fill(); }
 
 function draw(now){
   ctx.save();
@@ -248,13 +308,18 @@ function draw(now){
   for(let l=1;l<LANES;l++){ const lx=road.x+laneW*l-2;
     for(let y=-40+scroll; y<H; y+=40) ctx.fillRect(lx, y, 4, 22); }
 
+  if(night){ ctx.fillStyle='rgba(4,8,22,0.60)'; ctx.fillRect(0,0,W,H); }   // oscuridad nocturna
   if(state!=='menu'){
+    if(night && state==='playing') drawHeadlights(player);
     for(const co of coins){ ctx.fillStyle='#ffcc22'; ctx.beginPath(); ctx.arc(co.x,co.y,co.r,0,TAU); ctx.fill();
       ctx.fillStyle='#b8860b'; ctx.beginPath(); ctx.arc(co.x,co.y,co.r*0.55,0,TAU); ctx.fill(); }
     for(const en of enemies) drawCar(en.x,en.y,en.w,en.h,en.color,0);
     if(state==='playing') drawCar(player.x,player.y,player.w,player.h,carColor,player.tilt);
     for(const p of parts){ ctx.globalAlpha=clamp(p.life/25,0,1); ctx.fillStyle=p.c; ctx.fillRect(p.x-2,p.y-2,4,4); }
     ctx.globalAlpha=1;
+    if(turboT>0 && state==='playing'){ ctx.strokeStyle='rgba(255,255,255,.45)'; ctx.lineWidth=2; ctx.beginPath();
+      for(let i=0;i<16;i++){ const x=road.x+((i*53 + now*0.9)%road.w); const y=((i*61 + now*1.4)%(H+60))-30;
+        ctx.moveTo(x,y); ctx.lineTo(x,y+46); } ctx.stroke(); }
   }
   ctx.restore();
 }
