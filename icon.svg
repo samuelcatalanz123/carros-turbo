@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#12306a"/><stop offset="1" stop-color="#0a0e14"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="110" fill="url(#bg)"/>
+  <!-- carretera -->
+  <rect x="176" y="30" width="160" height="452" fill="#2b2f36"/>
+  <rect x="170" y="30" width="6" height="452" fill="#f4f4f4"/>
+  <rect x="336" y="30" width="6" height="452" fill="#f4f4f4"/>
+  <g fill="#ffffff" opacity="0.8">
+    <rect x="253" y="60" width="6" height="46"/>
+    <rect x="253" y="146" width="6" height="46"/>
+    <rect x="253" y="232" width="6" height="46"/>
+    <rect x="253" y="318" width="6" height="46"/>
+    <rect x="253" y="404" width="6" height="46"/>
+  </g>
+  <!-- carro (visto desde arriba) -->
+  <g transform="translate(256,300)">
+    <rect x="-80" y="-70" width="26" height="52" rx="8" fill="#111111"/>
+    <rect x="54" y="-70" width="26" height="52" rx="8" fill="#111111"/>
+    <rect x="-80" y="20" width="26" height="52" rx="8" fill="#111111"/>
+    <rect x="54" y="20" width="26" height="52" rx="8" fill="#111111"/>
+    <rect x="-64" y="-106" width="128" height="212" rx="26" fill="#e8402c"/>
+    <rect x="-46" y="-66" width="92" height="46" rx="12" fill="#0a0e14" opacity="0.35"/>
+    <rect x="-46" y="18" width="92" height="46" rx="12" fill="#0a0e14" opacity="0.35"/>
+    <rect x="-44" y="-114" width="30" height="18" rx="5" fill="#ffffff"/>
+    <rect x="14" y="-114" width="30" height="18" rx="5" fill="#ffffff"/>
+    <rect x="-8" y="-106" width="16" height="212" fill="#ffffff" opacity="0.85"/>
+  </g>
+</svg>
